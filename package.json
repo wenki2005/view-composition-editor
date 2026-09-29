@@ -1,6 +1,6 @@
 {
   "name": "视图作文-可视化编辑器",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Local visual editor and MCP bridge for the static projects in this workspace.",

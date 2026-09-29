@@ -39,14 +39,23 @@ async function writeWorkspaceRoots(roots) {
   await fs.writeFile(workspaceStateFile, `${JSON.stringify({ version: 1, roots: [...new Set(roots.map(normalizeAbsolutePath))] }, null, 2)}\n`, 'utf8');
 }
 
+async function findEntryHtml(root) {
+  let entries = [];
+  try { entries = await fs.readdir(root, { withFileTypes: true }); } catch { return null; }
+  const htmlFiles = entries.filter((entry) => entry.isFile() && /\.html?$/i.test(entry.name)).map((entry) => entry.name).sort((a, b) => (a.toLowerCase() === 'index.html' ? -1 : b.toLowerCase() === 'index.html' ? 1 : a.localeCompare(b, 'zh-CN')));
+  return htmlFiles[0] || null;
+}
+
 async function projectFromRoot(root) {
   const normalized = normalizeAbsolutePath(root);
   if (normalized === editorRoot) return null;
-  const indexPath = path.join(normalized, 'index.html');
+  const entryName = await findEntryHtml(normalized);
+  if (!entryName) return null;
+  const indexPath = path.join(normalized, entryName);
   try {
     const stat = await fs.stat(indexPath);
     if (!stat.isFile()) return null;
-    return { id: projectIdFor(normalized), name: path.basename(normalized) || normalized, root: normalized, path: normalized, indexPath, updatedAt: stat.mtime.toISOString(), size: stat.size };
+    return { id: projectIdFor(normalized), name: path.basename(normalized) || normalized, root: normalized, path: normalized, indexPath, entryPage: entryName, updatedAt: stat.mtime.toISOString(), size: stat.size };
   } catch { return null; }
 }
 
@@ -119,17 +128,19 @@ export async function browseDirectory(directoryPath = driveRoot) {
   for (const entry of await fs.readdir(current, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith('.') || excludedFolders.has(entry.name)) continue;
     const absolute = path.join(current, entry.name);
-    const hasIndex = await fs.access(path.join(absolute, 'index.html')).then(() => true).catch(() => false);
-    entries.push({ name: entry.name, path: absolute, hasIndex });
+    const entryPage = await findEntryHtml(absolute);
+    const hasPage = Boolean(entryPage);
+    entries.push({ name: entry.name, path: absolute, hasIndex: hasPage, hasPage, entryPage });
   }
-  entries.sort((a, b) => Number(b.hasIndex) - Number(a.hasIndex) || a.name.localeCompare(b.name, 'zh-CN'));
+  entries.sort((a, b) => Number(b.hasPage) - Number(a.hasPage) || a.name.localeCompare(b.name, 'zh-CN'));
   const parent = path.dirname(current) === current ? null : path.dirname(current);
-  return { path: current, parent, hasIndex: await fs.access(path.join(current, 'index.html')).then(() => true).catch(() => false), entries };
+  const currentEntryPage = await findEntryHtml(current);
+  return { path: current, parent, hasIndex: Boolean(currentEntryPage), hasPage: Boolean(currentEntryPage), entryPage: currentEntryPage, entries };
 }
 
 export async function registerProject(directoryPath) {
   const project = await projectFromRoot(directoryPath);
-  if (!project) throw new Error('选择的文件夹中没有 index.html');
+  if (!project) throw new Error('选择的文件夹中没有 HTML 页面。请进入包含 index.html、main.html 或其他 .html 文件的项目文件夹。');
   const roots = await readWorkspaceRoots();
   await writeWorkspaceRoots([...roots, project.root]);
   return project;

@@ -87,7 +87,7 @@ async function serveWorkspaceFile(res, pathname) {
 }
 
 async function handleApi(req, res, url) {
-  if (req.method === 'GET' && url.pathname === '/api/health') return sendJson(res, 200, { ok: true, name: '视图编辑器', version: '0.1.0' });
+  if (req.method === 'GET' && url.pathname === '/api/health') return sendJson(res, 200, { ok: true, name: '视图编辑器', version: '0.2.0' });
   if (req.method === 'GET' && url.pathname === '/api/agent/config') return sendJson(res, 200, { agent: getAgentConfig() });
   if (req.method === 'POST' && url.pathname === '/api/agent/config') return sendJson(res, 200, { agent: await saveAgentConfig(await readBody(req)) });
   if (req.method === 'POST' && url.pathname === '/api/agent/test') return sendJson(res, 200, await testAgentConnection(await readBody(req)));

@@ -1,5 +1,10 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const APP_VERSION = '0.2.0';
+const CHANGELOG = [
+  { version: '0.2.0', date: '2026-09-29', items: ['分发包可打开包含任意 HTML 入口的项目文件夹，并可直接选择当前文件夹。', '新增可点击的版本号与更新记录面板。', 'AI 协作面板支持自由拖动宽度，设置内容在窄窗口下也能完整显示。'] },
+  { version: '0.1.0', date: '2026-09-28', items: ['完成可视化选取、移动、缩放、磁吸、锁定、删除、撤销与恢复。', '加入多页面、交互场景、设备模拟、素材替换与 MCP 接口。', '加入内置 Agent、多会话与项目文件协作能力。'] },
+];
 
 const state = {
   projects: [],
@@ -32,7 +37,12 @@ const state = {
   agentSessionId: '',
   agentBusy: false,
   agentPendingOperations: [],
+  aiResizeSession: null,
   folderBrowser: { path: null, parent: null, selected: null },
+  codeFiles: [],
+  codePath: '',
+  codeOriginal: '',
+  codeDirty: false,
 };
 
 const els = {
@@ -70,8 +80,13 @@ const els = {
   folderEntries: $('#folderEntries'),
   folderUp: $('#folderUp'),
   folderGo: $('#folderGo'),
+  selectCurrentFolder: $('#selectCurrentFolder'),
   openFolderProject: $('#openFolderProject'),
   folderSelectionHint: $('#folderSelectionHint'),
+  appVersion: $('#appVersion'),
+  changelogDialog: $('#changelogDialog'),
+  closeChangelog: $('#closeChangelog'),
+  changelogList: $('#changelogList'),
   confirmSelection: $('#confirmSelection'),
   snapTool: $('#snapTool'),
   testPreviewButton: $('#testPreviewButton'),
@@ -101,6 +116,16 @@ const els = {
   agentMessages: $('#agentMessages'),
   agentInput: $('#agentInput'),
   sendAgentMessage: $('#sendAgentMessage'),
+  aiPanelResize: $('#aiPanelResize'),
+  sidePanel: $('#sidePanel'),
+  reloadPreview: $('#refreshPreview'),
+  codeFileList: $('#codeFileList'),
+  codeFilePath: $('#codeFilePath'),
+  codeFileState: $('#codeFileState'),
+  codeEditor: $('#codeEditor'),
+  reloadCodeFiles: $('#reloadCodeFiles'),
+  discardCodeChanges: $('#discardCodeChanges'),
+  saveCodeFile: $('#saveCodeFile'),
 };
 
 const DEVICE_PRESETS = {
@@ -776,7 +801,7 @@ async function loadProjects(preferredId = '') {
     option.textContent = `${project.name} · ${project.path}`;
     els.projectSelect.append(option);
   }
-  if (!state.projects.length) throw new Error('还没有找到项目，请使用“浏览文件夹”选择一个包含 index.html 的文件夹');
+  if (!state.projects.length) throw new Error('还没有找到项目，请使用“浏览文件夹”选择一个包含 HTML 页面（例如 index.html 或 main.html）的文件夹');
   const next = state.projects.find((project) => project.id === preferredId) || state.projects[0];
   els.projectSelect.value = next.id;
   await loadProject(next.id);
@@ -786,18 +811,21 @@ function renderFolderBrowser(data) {
   state.folderBrowser = { path: data.path, parent: data.parent, selected: state.folderBrowser.selected && data.entries.some((entry) => entry.path === state.folderBrowser.selected) ? state.folderBrowser.selected : null };
   els.folderPath.value = data.path;
   els.folderUp.disabled = !data.parent;
+  els.selectCurrentFolder.disabled = !data.hasPage;
+  els.selectCurrentFolder.title = data.hasPage ? `使用当前文件夹（${data.entryPage}）` : '当前文件夹没有 HTML 页面';
   els.folderEntries.replaceChildren();
   if (!data.entries.length) {
     const empty = document.createElement('div'); empty.className = 'folder-empty'; empty.textContent = '当前目录没有可浏览的子文件夹。'; els.folderEntries.append(empty);
   }
   for (const entry of data.entries) {
     const row = document.createElement('button'); row.type = 'button'; row.className = 'folder-entry'; row.setAttribute('role', 'option'); row.dataset.path = entry.path;
-    const icon = document.createElement('span'); icon.className = 'folder-entry-icon'; icon.textContent = entry.hasIndex ? '▣' : '▱';
+    const canOpen = entry.hasPage ?? entry.hasIndex;
+    const icon = document.createElement('span'); icon.className = 'folder-entry-icon'; icon.textContent = canOpen ? '▣' : '▱';
     const name = document.createElement('span'); name.className = 'folder-entry-name'; name.textContent = entry.name;
-    const badge = document.createElement('span'); badge.className = 'folder-entry-badge'; badge.textContent = entry.hasIndex ? '项目 · index.html' : '打开';
+    const badge = document.createElement('span'); badge.className = 'folder-entry-badge'; badge.textContent = canOpen ? `项目 · ${entry.entryPage || 'HTML 页面'}` : '打开';
     row.append(icon, name, badge);
     row.addEventListener('click', () => {
-      if (entry.hasIndex) {
+      if (canOpen) {
         state.folderBrowser.selected = entry.path;
         $$('.folder-entry', els.folderEntries).forEach((node) => node.classList.toggle('is-selected', node === row));
         els.openFolderProject.disabled = false;
@@ -806,7 +834,21 @@ function renderFolderBrowser(data) {
     });
     els.folderEntries.append(row);
   }
-  if (!state.folderBrowser.selected) { els.openFolderProject.disabled = true; els.folderSelectionHint.textContent = '选择一个包含 index.html 的项目文件夹'; }
+  if (!state.folderBrowser.selected) { els.openFolderProject.disabled = true; els.folderSelectionHint.textContent = data.hasPage ? `当前文件夹包含 ${data.entryPage}，可直接选择` : '选择一个包含 HTML 页面（例如 index.html 或 main.html）的项目文件夹'; }
+}
+
+function renderChangelog() {
+  els.changelogList.replaceChildren();
+  for (const release of CHANGELOG) {
+    const article = document.createElement('article'); article.className = 'changelog-entry';
+    const header = document.createElement('div'); header.className = 'changelog-entry-header';
+    const title = document.createElement('h3'); title.textContent = `v${release.version}`;
+    const date = document.createElement('time'); date.dateTime = release.date; date.textContent = release.date;
+    header.append(title, date);
+    const list = document.createElement('ul');
+    for (const item of release.items) { const li = document.createElement('li'); li.textContent = item; list.append(li); }
+    article.append(header, list); els.changelogList.append(article);
+  }
 }
 
 async function browseFolder(folderPath = '') {
@@ -880,6 +922,7 @@ async function loadProject(project) {
   state.currentPage = 'index.html';
   await loadPages(project);
   await loadPage(state.currentPage);
+  await loadCodeFiles();
 }
 
 async function saveProject() {
@@ -931,6 +974,77 @@ function updateBrowserMock(projectName = '', page = state.currentPage) {
   els.browserAddressText.textContent = `${title}  /  ${page || 'index.html'}`;
   els.browserTabTitle.title = title;
   els.browserAddressText.title = `${title} / ${page || 'index.html'}`;
+}
+
+function refreshPreview() {
+  if (!state.doc?.documentElement) return notify('页面还没有加载完成');
+  const html = serializeDocument();
+  const onload = () => {
+    els.preview.removeEventListener('load', onload);
+    setupFrame();
+    els.connectionStatus.textContent = `已刷新 · ${state.projects.find((item) => item.id === state.currentProject)?.name || state.currentProject}`;
+    notify('预览已重新连接');
+  };
+  els.preview.addEventListener('load', onload);
+  els.preview.srcdoc = addPreviewBase(html);
+}
+
+function renderCodeFiles() {
+  els.codeFileList.replaceChildren();
+  const files = state.codeFiles.filter((file) => file.text && typeof file.content === 'string');
+  if (!files.length) { const empty = document.createElement('div'); empty.className = 'code-empty'; empty.textContent = '项目中没有可编辑的文本文件'; els.codeFileList.append(empty); return; }
+  for (const file of files) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = `code-file${file.path === state.codePath ? ' is-active' : ''}`;
+    const icon = document.createElement('span'); icon.className = 'code-file-icon'; icon.textContent = file.type === 'html' ? 'HTML' : file.type === 'css' ? 'CSS' : file.type === 'js' ? 'JS' : 'TXT';
+    const label = document.createElement('span'); label.className = 'code-file-name'; label.textContent = file.path;
+    button.append(icon, label);
+    button.addEventListener('click', () => selectCodeFile(file.path));
+    els.codeFileList.append(button);
+  }
+}
+
+function updateCodeEditorState() {
+  const dirty = state.codeDirty;
+  els.codeFileState.textContent = dirty ? '未保存' : (state.codePath ? '已读取' : '—');
+  els.codeFileState.dataset.state = dirty ? 'dirty' : '';
+  els.saveCodeFile.disabled = !state.codePath || !dirty;
+  els.discardCodeChanges.disabled = !state.codePath || !dirty;
+}
+
+function selectCodeFile(filePath) {
+  const file = state.codeFiles.find((item) => item.path === filePath);
+  if (!file) return;
+  if (state.codeDirty && !window.confirm('当前文件有未保存修改，切换文件会放弃这些修改。继续吗？')) return;
+  state.codePath = file.path;
+  state.codeOriginal = file.content;
+  state.codeDirty = false;
+  els.codeFilePath.textContent = file.path;
+  els.codeEditor.value = file.content;
+  renderCodeFiles();
+  updateCodeEditorState();
+}
+
+async function loadCodeFiles() {
+  if (!state.currentProject) return;
+  const result = await api(`/api/project/files?project=${encodeURIComponent(state.currentProject)}&content=1`);
+  state.codeFiles = (result.files || []).filter((file) => file.text && typeof file.content === 'string');
+  renderCodeFiles();
+  const current = state.codeFiles.find((file) => file.path === state.codePath) || state.codeFiles.find((file) => file.path === state.currentPage) || state.codeFiles[0];
+  if (current) selectCodeFile(current.path);
+}
+
+async function saveCodeFile() {
+  if (!state.currentProject || !state.codePath || !state.codeDirty) return;
+  if (state.dirty && !window.confirm('画布有未保存的可视化修改，重新载入源码会替换当前画布状态。继续保存代码吗？')) return;
+  const content = els.codeEditor.value;
+  await api(`/api/project/file?project=${encodeURIComponent(state.currentProject)}`, { method: 'POST', body: JSON.stringify({ path: state.codePath, content }) });
+  const file = state.codeFiles.find((item) => item.path === state.codePath);
+  if (file) file.content = content;
+  state.codeOriginal = content;
+  state.codeDirty = false;
+  updateCodeEditorState();
+  await loadPage(state.currentPage);
+  notify(`已保存 ${state.codePath}，预览已刷新`);
 }
 
 function renderScenes() {
@@ -1255,6 +1369,46 @@ async function applyAgentOperations(operations) {
   }
 }
 
+function setAiPanelWidth(value, { persist = true } = {}) {
+  const viewportWidth = window.innerWidth || 1280;
+  const compact = viewportWidth <= 1360;
+  const leftRail = compact ? 62 : 72;
+  const canvasMin = compact ? 480 : 560;
+  const inspector = compact ? 284 : 312;
+  const max = Math.max(320, viewportWidth - leftRail - canvasMin - inspector - 8);
+  const width = Math.max(230, Math.min(max, Number(value) || 268));
+  document.documentElement.style.setProperty('--side-panel-width', `${Math.round(width)}px`);
+  els.aiPanelResize?.setAttribute('aria-valuenow', String(Math.round(width)));
+  if (persist) localStorage.setItem('vse-ai-panel-width', String(Math.round(width)));
+}
+
+function initAiPanelResize() {
+  const saved = Number(localStorage.getItem('vse-ai-panel-width'));
+  if (Number.isFinite(saved) && saved > 0) setAiPanelWidth(saved, { persist: false });
+  els.aiPanelResize?.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    const width = document.getElementById('sidePanel')?.getBoundingClientRect().width || 268;
+    state.aiResizeSession = { startX: event.clientX, startWidth: width };
+    els.aiPanelResize.classList.add('is-dragging');
+    const move = (moveEvent) => {
+      if (!state.aiResizeSession) return;
+      setAiPanelWidth(state.aiResizeSession.startWidth + moveEvent.clientX - state.aiResizeSession.startX);
+    };
+    const stop = () => {
+      state.aiResizeSession = null;
+      els.aiPanelResize.classList.remove('is-dragging');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop, { once: true });
+  });
+  window.addEventListener('resize', () => {
+    const current = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--side-panel-width')) || 268;
+    setAiPanelWidth(current, { persist: false });
+  });
+}
+
 function initRangeDrag() {
   for (const handle of [$('#rangeStartHandle'), $('#rangeEndHandle')]) {
     handle.addEventListener('pointerdown', (event) => { state.rangeDragging = handle === $('#rangeStartHandle') ? 'start' : 'end'; handle.setPointerCapture(event.pointerId); });
@@ -1273,14 +1427,29 @@ function initRangeDrag() {
 
 function bindEvents() {
   applyDevicePreset('desktop');
+  initAiPanelResize();
   els.projectSelect.addEventListener('change', () => loadProject(els.projectSelect.value).catch((error) => notify(error.message, 'error')));
   els.pageSelect.addEventListener('change', () => loadPage(els.pageSelect.value).catch((error) => notify(error.message, 'error')));
   els.browseProjects.addEventListener('click', () => openFolderDialog());
   els.folderUp.addEventListener('click', () => { if (state.folderBrowser.parent) browseFolder(state.folderBrowser.parent).catch((error) => notify(error.message, 'error')); });
   els.folderGo.addEventListener('click', () => browseFolder(els.folderPath.value.trim()).catch((error) => notify(error.message, 'error')));
+  els.selectCurrentFolder.addEventListener('click', () => {
+    if (!state.folderBrowser.path || els.selectCurrentFolder.disabled) return;
+    state.folderBrowser.selected = state.folderBrowser.path;
+    els.openFolderProject.disabled = false;
+    els.folderSelectionHint.textContent = `已选择：${state.folderBrowser.path}`;
+  });
   els.openFolderProject.addEventListener('click', () => chooseFolderProject().catch((error) => notify(error.message, 'error')));
+  els.appVersion.addEventListener('click', () => { renderChangelog(); els.changelogDialog.showModal(); });
+  els.closeChangelog.addEventListener('click', () => els.changelogDialog.close());
+  els.changelogDialog.addEventListener('click', (event) => { if (event.target === els.changelogDialog) els.changelogDialog.close(); });
   $('#reloadProject').addEventListener('click', () => loadPage(state.currentPage).catch((error) => notify(error.message, 'error')));
+  els.reloadPreview.addEventListener('click', refreshPreview);
   $('#saveButton').addEventListener('click', () => saveProject().catch((error) => notify(error.message, 'error')));
+  els.reloadCodeFiles.addEventListener('click', () => loadCodeFiles().catch((error) => notify(error.message, 'error')));
+  els.codeEditor.addEventListener('input', () => { state.codeDirty = els.codeEditor.value !== state.codeOriginal; updateCodeEditorState(); });
+  els.discardCodeChanges.addEventListener('click', () => { els.codeEditor.value = state.codeOriginal; state.codeDirty = false; updateCodeEditorState(); });
+  els.saveCodeFile.addEventListener('click', () => saveCodeFile().catch((error) => notify(error.message, 'error')));
   els.captureScene.addEventListener('click', captureScene);
   els.agentSettingsToggle.addEventListener('click', () => { els.agentSettings.open = !els.agentSettings.open; });
   els.agentSession.addEventListener('change', () => { state.agentPendingOperations = []; loadAgentSession(els.agentSession.value); });
@@ -1308,9 +1477,14 @@ function bindEvents() {
     if (!modifier || event.altKey) return;
     const target = event.target;
     const isTextEditing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
-    if (isTextEditing && !['scaleInput', 'scaleRange'].includes(target.id)) return;
     const key = event.key.toLowerCase();
-    if (key === 'z') {
+    if (key === 's') {
+      if (isTextEditing && target !== els.codeEditor) return;
+      event.preventDefault();
+      if (target === els.codeEditor) saveCodeFile().catch((error) => notify(error.message, 'error'));
+      else saveProject().catch((error) => notify(error.message, 'error'));
+    } else if (isTextEditing && !['scaleInput', 'scaleRange'].includes(target.id)) return;
+    else if (key === 'z') {
       event.preventDefault();
       if (event.shiftKey) redoStep();
       else undoStep();
@@ -1330,6 +1504,7 @@ function bindEvents() {
   });
   $$('.nav-item').forEach((item) => item.addEventListener('click', () => {
     state.activePanel = item.dataset.panel;
+    els.sidePanel.classList.toggle('is-ai', state.activePanel === 'ai');
     $$('.nav-item').forEach((node) => node.classList.toggle('is-active', node === item));
     $$('[data-section]').forEach((section) => section.classList.toggle('is-hidden', section.dataset.section !== state.activePanel));
   }));
