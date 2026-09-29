@@ -1,0 +1,7 @@
+node_modules/
+npm-debug.log*
+.DS_Store
+
+# 本机使用数据，不提交到 GitHub
+data/*.json
+!data/*.example.json

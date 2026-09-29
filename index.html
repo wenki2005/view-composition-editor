@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b1220" />
+    <title>视图作文 · 可视化编辑器</title>
+    <link rel="stylesheet" href="./css/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark">V</div>
+          <div>
+            <strong>视图编辑器</strong>
+            <span>Visual source studio</span>
+          </div>
+        </div>
+        <div class="project-picker">
+          <label for="projectSelect">当前项目</label>
+          <select id="projectSelect" aria-label="选择项目"></select>
+          <button class="ghost-button folder-picker-button" id="browseProjects" type="button">浏览文件夹</button>
+          <button class="icon-button" id="reloadProject" title="重新载入页面">↻</button>
+          <label for="pageSelect">页面</label>
+          <select id="pageSelect" aria-label="选择页面"></select>
+        </div>
+        <div class="command-group">
+          <button class="ghost-button" id="undoButton" title="撤销最近一步（Ctrl+Z）" aria-keyshortcuts="Control+Z" disabled>撤销一步</button>
+          <button class="ghost-button" id="redoButton" title="恢复刚撤销的步骤（Ctrl+Y）" aria-keyshortcuts="Control+Y" disabled>恢复一步</button>
+          <span class="history-status" id="historyStatus">0 / 0 步</span>
+          <button class="primary-button" id="saveButton">保存到项目</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="navigator-panel panel">
+          <div class="panel-heading compact-heading">
+            <span>导航</span>
+            <span class="live-dot" title="本地连接正常"></span>
+          </div>
+          <nav class="nav-stack" aria-label="编辑器导航">
+            <button class="nav-item is-active" data-panel="layers"><span class="nav-icon">⌘</span><span>图层</span></button>
+            <button class="nav-item" data-panel="assets"><span class="nav-icon">▧</span><span>素材</span></button>
+            <button class="nav-item" data-panel="triggers"><span class="nav-icon">⌁</span><span>交互</span></button>
+            <button class="nav-item" data-panel="scenes"><span class="nav-icon">◌</span><span>场景</span></button>
+            <button class="nav-item" data-panel="ai"><span class="nav-icon">✦</span><span>AI 协作</span></button>
+          </nav>
+          <div class="navigator-note">
+            <span class="note-kicker">LOCAL FIRST</span>
+            <p>修改先在实时画布里预览，保存后才写回原项目。</p>
+          </div>
+        </aside>
+
+        <aside class="side-panel panel" id="sidePanel">
+          <section class="panel-section" data-section="layers">
+            <div class="panel-heading">
+              <div><span class="eyebrow">DOM / LAYERS</span><h2>页面元素</h2></div>
+              <div class="panel-heading-actions"><button class="icon-button panel-collapse-button" id="collapseLayers" type="button" title="折叠全部图层" aria-label="折叠全部图层">⌃</button><span class="count-pill" id="layerCount">0</span></div>
+            </div>
+            <div class="search-wrap"><span>⌕</span><input id="layerSearch" placeholder="搜索元素、文字或类名" /></div>
+            <div id="layerTree" class="layer-tree" aria-label="页面图层"></div>
+          </section>
+          <section class="panel-section is-hidden" data-section="assets">
+            <div class="panel-heading"><div><span class="eyebrow">MEDIA</span><h2>素材</h2></div><span class="count-pill" id="assetCount">0</span></div>
+            <p class="panel-help">点击素材会自动定位画布中正在使用它的图片；未确认时也会先显示到画布并打开右侧图片调整。确认图片后，可直接打开文件替换。</p>
+            <div class="asset-toolbar"><label class="file-button">打开文件替换<input id="assetUpload" type="file" accept="image/*" /></label><span id="assetSelectionHint">先点击一张素材</span></div>
+            <div id="assetGrid" class="asset-grid"></div>
+          </section>
+          <section class="panel-section is-hidden" data-section="triggers">
+            <div class="panel-heading"><div><span class="eyebrow">MOTION</span><h2>交互</h2></div><span class="count-pill">JSON</span></div>
+            <p class="panel-help">按钮、链接和表单控件会保留原页面交互；编辑器新增的触发器会保存到 <code>data-vse-trigger</code>。</p>
+            <div id="triggerSummary" class="trigger-summary empty-state">先在画布中选中一个元素。</div>
+          </section>
+          <section class="panel-section is-hidden" data-section="scenes">
+            <div class="panel-heading"><div><span class="eyebrow">STATES</span><h2>交互场景</h2></div><span class="count-pill" id="sceneCount">0</span></div>
+            <p class="panel-help">右键操作页面后，可以捕获当前状态；恢复场景会把画布回到当时的页面状态。</p>
+            <div class="scene-capture"><input id="sceneName" placeholder="场景名称，例如：观察头发" aria-label="场景名称" /><button class="primary-button" id="captureScene" type="button">捕获当前场景</button></div>
+            <div id="sceneList" class="scene-list" aria-label="交互场景列表"></div>
+          </section>
+          <section class="panel-section is-hidden" data-section="ai">
+            <div class="panel-heading ai-heading"><div><span class="eyebrow">PI / MCP</span><h2>AI 协作</h2></div><div class="ai-heading-actions"><span class="type-badge" id="agentConnection">检查中</span><button class="icon-button" id="agentSettingsToggle" type="button" title="打开 Agent 设置">⚙</button></div></div>
+            <details class="agent-settings" id="agentSettings"><summary>Agent 设置</summary><div class="agent-settings-grid"><label><span>会话</span><select id="agentSession" aria-label="选择 Agent 会话"><option value="">新会话</option></select></label><div class="ai-actions"><button class="ghost-button" id="newAgentSession" type="button">新建会话</button><button class="ghost-button" id="resetAgentSession" type="button">清空当前会话</button></div><label><span>Provider</span><input id="agentProvider" value="openai" /></label><label><span>模型</span><input id="agentModel" value="gpt-4o-mini" /></label><label><span>API 地址（可选）</span><input id="agentApiUrl" placeholder="例如 http://127.0.0.1:11434/v1" /></label><label class="agent-key-field"><span>API Key</span><input id="agentApiKey" type="password" placeholder="仅保存在本机 data/agent-config.json" /></label><div class="ai-actions"><button class="primary-button" id="saveAgentSettings" type="button">保存设置</button><button class="ghost-button" id="testAgentConnection" type="button">测试连接</button></div></div></details>
+            <div id="agentMessages" class="agent-messages" aria-live="polite"><div class="agent-empty">还没有对话。告诉 Agent 你想调整什么。</div></div>
+            <label class="wide-field agent-input-field"><span>和 Agent 说</span><textarea id="agentInput" rows="3" placeholder="例如：把我刚选中的按钮在手机端缩小一点；或者：检查整个项目所有页面的标题层级。"></textarea></label>
+            <div class="ai-actions"><button class="primary-button" id="sendAgentMessage" type="button">发送给内置 Agent</button></div>
+          </section>
+        </aside>
+
+        <section class="canvas-panel">
+          <div class="canvas-toolbar">
+            <div class="canvas-context"><span class="status-chip">LIVE PREVIEW</span><span id="canvasTitle">等待项目</span></div>
+            <div class="canvas-actions">
+              <button class="tool-button is-active" id="selectTool" title="选择元素">选择</button>
+              <button class="tool-button is-active" id="snapTool" title="拖动和缩放时吸附到 8px 网格">磁吸</button>
+              <button class="tool-button" id="testPreviewButton" title="使用当前页面状态测试预览">测试预览</button>
+              <button class="tool-button" id="fitTool" title="适应画布">适应</button>
+              <label class="viewport-label" for="devicePreset">设备</label>
+              <select class="device-select" id="devicePreset" aria-label="模拟设备">
+                <option value="phone">手机 · 390 × 844</option>
+                <option value="phoneWide">手机横屏 · 844 × 390</option>
+                <option value="tablet">平板 · 820 × 1180</option>
+                <option value="tabletWide">平板横屏 · 1180 × 820</option>
+                <option value="laptop">笔记本 · 1366 × 768</option>
+                <option value="desktop" selected>桌面 · 1280 × 800</option>
+                <option value="custom">自定义</option>
+              </select>
+              <span class="viewport-label">预览宽度</span>
+              <input class="viewport-input" id="viewportWidth" type="number" min="320" max="2400" value="1280" aria-label="预览宽度" />
+              <span>px</span>
+              <span class="viewport-label">高度</span>
+              <input class="viewport-input" id="viewportHeight" type="number" min="240" max="1800" value="800" aria-label="预览高度" />
+              <span>px</span>
+            </div>
+          </div>
+          <div class="canvas-stage" id="canvasStage">
+            <div class="drafting-grid"></div>
+            <div class="canvas-ruler ruler-top"><span>0</span><span>320</span><span>640</span><span>960</span><span>1280</span></div>
+            <div class="canvas-ruler ruler-left"><span>0</span><span>240</span><span>480</span><span>720</span></div>
+            <div class="frame-wrap" id="frameWrap" data-device="desktop">
+              <div class="browser-window-bar" aria-hidden="true">
+                <div class="browser-tab-strip"><span class="browser-window-dots"><i></i><i></i><i></i></span><span class="browser-tab"><span class="browser-tab-icon">◈</span><span id="browserTabTitle">页面预览</span><span class="browser-tab-close">×</span></span><span class="browser-tab-new">+</span></div>
+                <div class="browser-address-row"><span class="browser-nav-icon">‹</span><span class="browser-nav-icon">›</span><span class="browser-nav-icon">↻</span><div class="browser-address"><span class="browser-lock">◉</span><span id="browserAddressText">本地页面预览</span></div><span class="browser-menu-icon">⋮</span></div>
+              </div>
+              <div class="device-viewport" id="deviceViewport">
+                <iframe id="previewFrame" title="页面实时预览"></iframe>
+                <div class="frame-badge" id="frameBadge">编辑模式</div>
+              </div>
+            </div>
+            <div id="selectionBox" class="selection-box is-hidden" aria-hidden="true">
+              <button class="resize-handle nw" data-resize="nw" aria-label="调整左上角"></button>
+              <button class="resize-handle n" data-resize="n" aria-label="调整上边"></button>
+              <button class="resize-handle ne" data-resize="ne" aria-label="调整右上角"></button>
+              <button class="resize-handle e" data-resize="e" aria-label="调整右边"></button>
+              <button class="resize-handle se" data-resize="se" aria-label="调整右下角"></button>
+              <button class="resize-handle s" data-resize="s" aria-label="调整下边"></button>
+              <button class="resize-handle sw" data-resize="sw" aria-label="调整左下角"></button>
+              <button class="resize-handle w" data-resize="w" aria-label="调整左边"></button>
+            </div>
+            <div id="selectionHud" class="selection-hud is-hidden" aria-hidden="true">
+              <span class="hud-tag" id="hudTag">div</span>
+              <span class="hud-size" id="hudSize">0 × 0</span>
+              <button class="hud-confirm" id="confirmSelection" type="button">确认选择</button>
+            </div>
+          </div>
+          <div class="canvas-footer"><span id="selectionSummary">左键选择元素 · 右键触发交互</span><span id="saveSummary">未保存</span></div>
+        </section>
+
+        <aside class="inspector-panel panel">
+          <div class="inspector-header">
+            <div><span class="eyebrow">INSPECTOR</span><h2 id="inspectorTitle">未选择元素</h2></div>
+            <div class="inspector-actions"><button class="ghost-button" id="lockElement" type="button" disabled>固定元素</button><button class="ghost-button danger-button" id="deleteElement" type="button" disabled>删除</button><button class="icon-button" id="clearSelection" title="取消选择">×</button></div>
+          </div>
+          <div id="inspectorEmpty" class="inspector-empty"><div class="empty-glyph">⌖</div><strong>选择一个页面元素</strong><p>你可以调整位置、大小、内容、图片和交互触发范围。</p></div>
+          <div id="inspectorContent" class="is-hidden">
+            <section class="inspector-section">
+              <div class="section-title">几何</div>
+              <div class="field-grid four-fields">
+                <label><span>X</span><input data-style="left" id="styleLeft" placeholder="自动" /></label>
+                <label><span>Y</span><input data-style="top" id="styleTop" placeholder="自动" /></label>
+                <label><span>宽</span><input data-style="width" id="styleWidth" placeholder="自动" /></label>
+                <label><span>高</span><input data-style="height" id="styleHeight" placeholder="自动" /></label>
+              </div>
+              <div class="scale-editor">
+                <div class="section-title row-between"><span>缩放</span><strong id="scaleValueLabel">100%</strong></div>
+                <div class="scale-controls"><input id="scaleRange" type="range" min="25" max="300" step="1" value="100" aria-label="缩放百分比" /><input id="scaleInput" type="number" min="25" max="300" step="1" value="100" aria-label="缩放百分比数值" /><span>%</span><button class="ghost-button" id="resetScale" type="button">重置</button></div>
+                <p class="field-hint">按中心缩放图片或任意页面元素</p>
+              </div>
+              <label class="toggle-row"><span>相对定位</span><input type="checkbox" id="relativePosition" /><i></i></label>
+            </section>
+            <section class="inspector-section">
+              <div class="section-title">外观</div>
+              <div class="field-grid two-fields">
+                <label><span>透明度</span><input data-style="opacity" id="styleOpacity" placeholder="1" /></label>
+                <label><span>圆角</span><input data-style="borderRadius" id="styleRadius" placeholder="0px" /></label>
+                <label><span>背景色</span><input data-style="backgroundColor" id="styleBackground" placeholder="继承" /></label>
+                <label><span>层级</span><input data-style="zIndex" id="styleZIndex" placeholder="自动" /></label>
+              </div>
+            </section>
+            <section class="inspector-section" id="contentSection">
+              <div class="section-title">内容</div>
+              <label class="wide-field"><span>文本</span><textarea id="textContent" rows="3" placeholder="当前元素的直接文本"></textarea></label>
+            </section>
+            <section class="inspector-section is-hidden" id="imageSection">
+              <div class="section-title row-between"><span>图片</span><span class="type-badge">IMG</span></div>
+              <label class="wide-field"><span>图片地址</span><input id="imageSrc" /></label>
+              <div class="image-actions"><label class="file-button">上传替换<input id="imageUpload" type="file" accept="image/*" /></label><button class="ghost-button" id="useSelectedAsset">从素材库选择</button></div>
+            </section>
+            <section class="inspector-section">
+              <div class="section-title row-between"><span>触发器</span><span class="type-badge" id="triggerBadge">NONE</span></div>
+              <div class="field-grid two-fields">
+                <label><span>方式</span><select id="triggerType"><option value="none">无</option><option value="hover">悬停</option><option value="click">点击</option><option value="appear">进入视口</option><option value="scroll">滚动范围</option><option value="viewProgress">视口进度</option></select></label>
+                <label><span>效果</span><select id="triggerEffect"><option value="none">无</option><option value="fade">淡入</option><option value="lift">上浮</option><option value="scale">缩放</option><option value="background">背景变化</option></select></label>
+              </div>
+              <div class="range-editor" id="rangeEditor"><div class="range-track"><span class="range-fill" id="rangeFill"></span><button class="range-handle start" id="rangeStartHandle" aria-label="触发起点"></button><button class="range-handle end" id="rangeEndHandle" aria-label="触发终点"></button></div><div class="range-values"><label>开始 <input id="triggerStart" type="number" min="0" max="100" value="20" />%</label><label>结束 <input id="triggerEnd" type="number" min="0" max="100" value="80" />%</label></div></div>
+              <label class="wide-field"><span>触发区扩展（px）</span><input id="triggerPadding" type="number" min="0" max="200" value="0" /></label>
+            </section>
+          </div>
+        </aside>
+      </main>
+      <footer class="statusbar"><span>本地项目编辑器 · MCP Ready</span><span id="connectionStatus">正在连接</span></footer>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <dialog class="folder-dialog" id="folderDialog" aria-labelledby="folderDialogTitle">
+      <form method="dialog" class="folder-dialog-shell">
+        <header class="folder-dialog-header">
+          <div><span class="eyebrow">LOCAL PROJECTS</span><h2 id="folderDialogTitle">选择项目文件夹</h2></div>
+          <button class="icon-button" value="cancel" aria-label="关闭">×</button>
+        </header>
+        <p class="folder-dialog-help">浏览 D 盘目录。可进入文件夹继续查找；含有 index.html 的文件夹可以直接打开。</p>
+        <div class="folder-location"><button type="button" class="ghost-button" id="folderUp">上一级</button><input id="folderPath" aria-label="当前目录" /><button type="button" class="ghost-button" id="folderGo">前往</button></div>
+        <div class="folder-browser" id="folderEntries" role="listbox" aria-label="文件夹列表"></div>
+        <footer class="folder-dialog-footer"><span id="folderSelectionHint">选择一个包含 index.html 的项目文件夹</span><button type="button" class="primary-button" id="openFolderProject" disabled>打开项目</button></footer>
+      </form>
+    </dialog>
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>
