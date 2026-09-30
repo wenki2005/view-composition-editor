@@ -353,7 +353,7 @@ export async function updateElement(projectId, selector, changes, pagePath = 'in
 export async function getEditorContext(projectId, pagePath = 'index.html', scope = 'page', selector = '') {
   const { html } = await readProjectHtml(projectId, pagePath);
   const config = await readProjectConfig(projectId, pagePath);
-  const context = { schemaVersion: 1, source: '视图作文可视化编辑器 MCP', project: projectId, page: pagePath, scope, selector: selector || null, html, config, inspection: inspectHtml(html) };
+  const context = { schemaVersion: 1, source: '可视化编辑器 MCP', project: projectId, page: pagePath, scope, selector: selector || null, html, config, inspection: inspectHtml(html) };
   const sourceFiles = await listProjectFiles(projectId, { includeContent: true });
   context.sourceFiles = sourceFiles.files.filter((file) => file.text && typeof file.content === 'string');
   context.sourceFileNote = 'sourceFiles 只包含可编辑文本源码，不包含密钥、凭据和二进制文件。';

@@ -21,7 +21,7 @@ import {
 } from './fs-utils.mjs';
 
 const server = new McpServer(
-  { name: '视图作文可视化编辑器', version: '0.2.0' },
+  { name: '可视化编辑器', version: '0.2.0' },
   {
     instructions: '这是一个本地静态网页可视化编辑器。先调用 browse_files 或 list_projects 找到项目，再调用 inspect_project 了解结构。修改元素后使用 save_page_config 或 update_element；任何会改写文件的工具都应在用户明确要求后调用。项目可以来自 D 盘任意包含 index.html 的文件夹。',
   },
@@ -236,4 +236,4 @@ server.registerTool(
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error('视图作文可视化编辑器 MCP server 已连接（stdio）');
+console.error('可视化编辑器 MCP server 已连接（stdio）');

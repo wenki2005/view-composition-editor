@@ -1,4 +1,4 @@
-# 视图作文 · 可视化编辑器
+# 可视化编辑器
 
 这是一个本地优先的网页可视化编辑器，面向本仓库已有的静态 HTML/CSS/JavaScript 项目。它把 Design Mode、VisBug、Deckflow HTML Editor、GrapesJS/VvvebJs 的思路组合成一个可直接运行的编辑工作台，并提供一个 MCP stdio 服务供 AI 客户端连接。
 
@@ -102,9 +102,9 @@ npm run mcp
 ```json
 {
   "mcpServers": {
-    "视图作文可视化编辑器": {
+    "可视化编辑器": {
       "command": "node",
-      "args": ["D:\\视图作文可视化编辑器\\server\\mcp.mjs"]
+      "args": ["D:\\可视化编辑器\\server\\mcp.mjs"]
     }
   }
 }

@@ -1144,7 +1144,7 @@ async function buildAiContext({ scope = 'page', prompt = els.agentInput?.value?.
   const metadata = state.projects.find((item) => item.id === state.currentProject);
   const context = {
     schemaVersion: 1,
-    source: '视图作文可视化编辑器',
+    source: '可视化编辑器',
     scope,
     project: { id: state.currentProject, name: metadata?.name || state.currentProject, path: metadata?.path || '' },
     page: state.currentPage,

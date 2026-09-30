@@ -12,7 +12,7 @@ const MAX_MESSAGES = 24;
 let localSettings = {};
 try { localSettings = JSON.parse(readFileSync(settingsFile, 'utf8')); } catch { localSettings = {}; }
 
-const SYSTEM_PROMPT = `你是“视图作文可视化编辑器”的内置协作 Agent。你和用户一起调整本地静态网页的视觉、交互和多状态场景。
+const SYSTEM_PROMPT = `你是“可视化编辑器”的内置协作 Agent。你和用户一起调整本地静态网页的视觉、交互和多状态场景。
 
 工作规则：
 1. 先理解用户目标和上下文，再给出清晰、可执行的修改方案。
